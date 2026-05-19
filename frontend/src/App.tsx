@@ -103,28 +103,79 @@ function App() {
       alert('Cadastro realizado com sucesso!');
       setAuthMode('login');
       setRegisterData({ username: '', email: '', password: '', role: 'doctor' });
-    } catch {
-      alert('Erro ao realizar cadastro.');
+    } catch (error) {
+      let message = 'Erro ao realizar cadastro.';
+      if (axios.isAxiosError(error) && error.response) {
+        if (error.response.status === 422 && error.response.data.detail) {
+          const details = error.response.data.detail;
+          const errorMessages = details.map((d: any) => {
+            if (d.loc.includes('password')) return 'A senha deve ter no mínimo 8 caracteres.';
+            return `${d.loc[1]}: ${d.msg}`;
+          }).join('\n');
+          message = `Erro de validação:\n${errorMessages}`;
+        } else if (error.response.data.detail) {
+          message = error.response.data.detail;
+        }
+      }
+      alert(message);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleRecordChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setRecordData(prev => ({ ...prev, [name]: value }));
+  };
+
   const handleCreateRecord = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const patientIdInt = parseInt(recordData.patient_id, 10);
+    if (isNaN(patientIdInt) || patientIdInt <= 0) {
+      alert('ID do Paciente inválido. Deve ser um número positivo.');
+      return;
+    }
+    if (recordData.diagnosis.trim().length < 2 || recordData.treatment.trim().length < 2) {
+      alert('Diagnóstico e tratamento devem ter pelo menos 2 caracteres.');
+      return;
+    }
+
     setLoading(true);
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
       await axios.post(`${API_URL}/records/`, {
-        patient_id: parseInt(recordData.patient_id),
+        patient_id: patientIdInt,
         diagnosis: recordData.diagnosis,
         treatment: recordData.treatment
       }, config);
       alert('Bloco minerado com sucesso!');
       setRecordData({ patient_id: '', diagnosis: '', treatment: '' });
       await fetchData();
-    } catch {
-      alert('Erro ao registrar no Blockchain.');
+    } catch (err) {
+      let message = 'Erro ao registrar no Blockchain.';
+      if (axios.isAxiosError(err) && err.response) {
+        if (err.response.status === 401) {
+          message = 'Sua sessão expirou. Por favor, faça login novamente.';
+          handleLogout();
+        } else if (err.response.status === 422 && err.response.data.detail) {
+                const errorDetail = err.response.data.detail;
+                if (Array.isArray(errorDetail)) {
+                  // Múltiplos erros de validação
+                  const errorMessages = errorDetail.map((d: any) => {
+                    const field = d.loc && d.loc.length > 1 ? d.loc[1] : 'Campo';
+                    return `${field}: ${d.msg}`;
+                  }).join('\n');
+                  message = `Erro de validação:\n${errorMessages}`;
+                } else {
+                  // Erro de validação único (string)
+                  message = `Erro de validação: ${errorDetail}`;
+                }
+        } else if (err.response.data.detail) {
+          message = err.response.data.detail;
+        }
+      }
+      alert(message);
     } finally {
       setLoading(false);
     }
@@ -163,9 +214,9 @@ function App() {
             <PlusCircle className="w-12 h-12 mb-6 text-blue-400" />
             <h3 className="text-2xl font-black mb-8">Novo Atendimento</h3>
             <form onSubmit={handleCreateRecord} className="space-y-5">
-              <input type="text" placeholder="CPF ou ID do Paciente" className="w-full bg-white/10 border border-white/10 rounded-2xl py-4 px-5 text-white placeholder:text-white/30 outline-none focus:bg-white/20 transition-all" value={recordData.patient_id} onChange={(e) => setRecordData({ ...recordData, patient_id: e.target.value })} />
-              <input type="text" placeholder="Diagnóstico" className="w-full bg-white/10 border border-white/10 rounded-2xl py-4 px-5 text-white placeholder:text-white/30 outline-none focus:bg-white/20 transition-all" value={recordData.diagnosis} onChange={(e) => setRecordData({ ...recordData, diagnosis: e.target.value })} />
-              <textarea placeholder="Prescrição / Tratamento" rows={3} className="w-full bg-white/10 border border-white/10 rounded-2xl py-4 px-5 text-white placeholder:text-white/30 outline-none focus:bg-white/20 transition-all resize-none" value={recordData.treatment} onChange={(e) => setRecordData({ ...recordData, treatment: e.target.value })} />
+              <input type="text" name="patient_id" placeholder="ID do Paciente" className="w-full bg-white/10 border border-white/10 rounded-2xl py-4 px-5 text-white placeholder:text-white/30 outline-none focus:bg-white/20 transition-all" value={recordData.patient_id} onChange={handleRecordChange} />
+              <input type="text" name="diagnosis" placeholder="Diagnóstico" className="w-full bg-white/10 border border-white/10 rounded-2xl py-4 px-5 text-white placeholder:text-white/30 outline-none focus:bg-white/20 transition-all" value={recordData.diagnosis} onChange={handleRecordChange} />
+              <textarea name="treatment" placeholder="Prescrição / Tratamento" rows={3} className="w-full bg-white/10 border border-white/10 rounded-2xl py-4 px-5 text-white placeholder:text-white/30 outline-none focus:bg-white/20 transition-all resize-none" value={recordData.treatment} onChange={handleRecordChange} />
               <button type="submit" className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl hover:bg-blue-700 transition-all uppercase text-xs tracking-widest shadow-lg shadow-blue-900/20">Registrar no SUS</button>
             </form>
           </div>
@@ -358,11 +409,12 @@ function App() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">E-mail</label>
-                  <input type="email" required className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm outline-none" value={registerData.email} onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })} />
+                  <input type="email" required className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm outline-none" value={registerData.email} onChange={(e) => setRegisterData({ ...registerData, email: e.target.value, username: e.target.value })} />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Senha</label>
-                  <input type="password" required className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm outline-none" value={registerData.password} onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })} />
+                  <input type="password" required minLength={8} className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 text-sm outline-none" value={registerData.password} onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })} />
+                  <p className="text-xs text-slate-400 ml-1">Mínimo de 8 caracteres.</p>
                 </div>
                 <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-5 rounded-2xl shadow-xl shadow-blue-200 transition-all uppercase text-xs tracking-widest">Finalizar Cadastro</button>
               </form>

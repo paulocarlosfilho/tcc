@@ -29,7 +29,7 @@ class TokenData(BaseModel):
 class HealthRecordBase(BaseModel):
     patient_id: int = Field(..., gt=0)
     diagnosis: str = Field(..., min_length=2, max_length=500)
-    treatment: str = Field(..., min_length=2, max_length=1000)
+    treatment: constr(min_length=2, max_length=1000)
 
 class HealthRecordCreate(HealthRecordBase):
     pass

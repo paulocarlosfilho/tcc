@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from .database import engine, Base
 from .exceptions import global_exception_handler
 from .logging_config import LoggingMiddleware, logger
-from .routes import auth, records, test_aws, test_aws, test_aws, test_aws
+from .routes import auth, records
 
 description = """
 🚀 **SUS Blockchain API** - Sistema de Prontuário Médico Profissional com Integridade Blockchain.
@@ -85,16 +85,10 @@ app.add_middleware(
 # Registra o Middleware de Observabilidade
 app.add_middleware(LoggingMiddleware)
 
-# Registra o Handler Global de Exceções
-app.add_exception_handler(Exception, global_exception_handler)
+
 
 app.include_router(auth.router)
-app.include_router(records.router)
-app.include_router(test_aws.router)
-app.include_router(test_aws.router)
-app.include_router(test_aws.router)
-app.include_router(test_aws.router)
-
+app.include_router(records.router)    
 @app.on_event("startup")
 async def startup():
     # Tenta conectar ao banco com retentativas (resiliência sênior)

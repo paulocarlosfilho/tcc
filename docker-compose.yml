@@ -6,6 +6,7 @@ services:
       - "4510-4569:4510-4569"
       - "8080:8080"
     environment:
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:-}
       - SERVICES=s3,cloudformation,ecr
       - DEBUG=1
       - DOCKER_HOST=unix:///var/run/docker.sock
@@ -33,6 +34,9 @@ services:
       - db
       - localstack
     environment:
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-blockchain_sus}
       - DATABASE_URL=postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-blockchain_sus}
       - SECRET_KEY=${SECRET_KEY:-super-secret-key-123}
       - ENVIRONMENT=development
@@ -52,3 +56,4 @@ services:
 
 volumes:
   postgres_data:
+  localstack_data:
