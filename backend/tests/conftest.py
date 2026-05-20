@@ -20,13 +20,6 @@ TestingSessionLocal = async_sessionmaker(
     engine, class_=AsyncSession, expire_on_commit=False
 )
 
-@pytest.fixture(scope="session")
-def event_loop(request):
-    """Cria uma instância do loop de eventos padrão para cada sessão de teste."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
-
 @pytest.fixture(scope="session", autouse=True)
 async def setup_database():
     """
