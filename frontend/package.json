@@ -11,6 +11,13 @@
     "test": "vitest",
     "test:run": "vitest run"
   },
+  "vitest": {
+    "test": {
+      "environment": "jsdom",
+      "globals": true,
+      "setupFiles": "./tests/setup.js"
+    }
+  },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.18",
     "@tailwindcss/vite": "^4.1.18",

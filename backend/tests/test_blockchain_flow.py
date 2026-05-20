@@ -1,39 +1,22 @@
 import pytest
-import httpx
-import asyncio
+from httpx import AsyncClient
+from app.main import app
 from datetime import datetime
-
-API_URL = "http://127.0.0.1:8000"
+import asyncio
 
 @pytest.mark.asyncio
 async def test_full_blockchain_flow():
-    # Retry logic no teste para aguardar o Uvicorn estar pronto
-    max_retries = 5
-    client = httpx.AsyncClient(base_url=API_URL, timeout=30.0)
-    
-    connected = False
-    for i in range(max_retries):
-        try:
-            await client.get("/")
-            connected = True
-            break
-        except Exception:
-            print(f"Aguardando API subir... tentativa {i+1}/{max_retries}")
-            await asyncio.sleep(2)
-    
-    if not connected:
-        pytest.fail("A API não respondeu no endereço 127.0.0.1:8000")
-
-    async with client:
+    async with AsyncClient(app=app, base_url="http://test") as client:
         # 1. AUTENTICAÇÃO
         # Criar um médico para o teste
         username = f"medico_teste_{int(datetime.now().timestamp())}"
-        await client.post("/auth/register", json={
+        register_res = await client.post("/auth/register", json={
             "username": username,
             "email": f"{username}@sus.gov.br",
             "password": "senha_segura_123",
             "role": "doctor"
         })
+        assert register_res.status_code == 201
         
         # Login para obter JWT
         login_res = await client.post("/auth/login", data={
@@ -77,6 +60,3 @@ async def test_full_blockchain_flow():
         status = verify_res.json()
         assert status["is_valid"] is True
         print(f"[OK] 5. Integridade da rede verificada. Total de blocos: {status['total_records']}")
-
-if __name__ == "__main__":
-    asyncio.run(test_full_blockchain_flow())
