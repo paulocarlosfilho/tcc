@@ -1,6 +1,7 @@
 import asyncio
 import os
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -28,10 +29,33 @@ Esta API foi construída com **FastAPI** para oferecer uma experiência de gest�
 ---
 """
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Tenta conectar ao banco com retentativas (resiliência sênior)
+    retries = 5
+    while retries > 0:
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("✅ Conexão com o banco de dados estabelecida e tabelas criadas.")
+            break
+        except Exception as e:
+            retries -= 1
+            logger.warning(f"⚠️ Erro ao conectar no banco. Tentativas restantes: {retries}. Erro: {e}")
+            if retries == 0:
+                logger.error("❌ Não foi possível conectar ao banco de dados após várias tentativas.")
+                raise e
+            await asyncio.sleep(3)
+    yield
+    # Código de limpeza (se necessário) pode ser adicionado aqui
+    logger.info("🔌 Encerrando a aplicação e a conexão com o banco de dados.")
+
+
 app = FastAPI(
     title="SUS Blockchain API 🏥⛓️",
     description=description,
     version="2.0.0",
+    lifespan=lifespan,
     contact={
         "name": "Suporte Técnico SUS Blockchain",
         "url": "https://github.com/seu-repositorio",
@@ -88,24 +112,7 @@ app.add_middleware(LoggingMiddleware)
 
 
 app.include_router(auth.router)
-app.include_router(records.router)    
-@app.on_event("startup")
-async def startup():
-    # Tenta conectar ao banco com retentativas (resiliência sênior)
-    retries = 5
-    while retries > 0:
-        try:
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-            logger.info("✅ Conexão com o banco de dados estabelecida e tabelas criadas.")
-            break
-        except Exception as e:
-            retries -= 1
-            logger.warning(f"⚠️ Erro ao conectar no banco. Tentativas restantes: {retries}. Erro: {e}")
-            if retries == 0:
-                logger.error("❌ Não foi possível conectar ao banco de dados após várias tentativas.")
-                raise e
-            await asyncio.sleep(3)
+app.include_router(records.router)
 
 @app.get("/")
 async def root():

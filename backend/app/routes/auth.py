@@ -34,46 +34,34 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
 
 @router.post("/register", response_model=UserResponse, status_code=201)
 async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
-    try:
-        print(f"DEBUG: Iniciando registro para usuário: {user.username} com cargo: {user.role}")
-        
-        # Verificar se o usuário já existe pelo username OU email
-        result = await db.execute(
-            select(User).where(
-                (User.username == user.username) | (User.email == user.email)
-            )
+    # Verificar se o usuário já existe pelo username OU email
+    result = await db.execute(
+        select(User).where(
+            (User.username == user.username) | (User.email == user.email)
         )
-        if result.scalars().first():
-            print(f"!!! ERRO NO REGISTRO !!!: Usuário ou email já cadastrado")
-            raise HTTPException(status_code=400, detail="Usuário ou email já cadastrado")
+    )
+    if result.scalars().first():
+        raise HTTPException(status_code=400, detail="Usuário ou email já cadastrado")
 
-        # Mapeamento simples para garantir que o cargo seja aceito pelo banco
-        role_map = {
-            "Médico": "doctor",
-            "Paciente": "patient",
-            "Administrador": "admin"
-        }
-        final_role = role_map.get(user.role, user.role.lower())
-        
-        hashed_password = get_password_hash(user.password)
-        db_user = User(
-            username=user.username,
-            email=user.email,
-            hashed_password=hashed_password,
-            role=final_role
-        )
-        db.add(db_user)
-        await db.commit()
-        await db.refresh(db_user)
-        print(f"DEBUG: Usuário {db_user.username} registrado com sucesso (ID: {db_user.id})")
-        return db_user
-    except HTTPException as he:
-        # Re-levanta exceções que já são HTTP (como o 400 acima)
-        raise he
-    except Exception as e:
-        print(f"!!! ERRO CRÍTICO NO REGISTRO !!!: {str(e)}")
-        await db.rollback()
-        raise HTTPException(status_code=500, detail=f"Erro interno no servidor: {str(e)}")
+    # Mapeamento simples para garantir que o cargo seja aceito pelo banco
+    role_map = {
+        "Médico": "doctor",
+        "Paciente": "patient",
+        "Administrador": "admin"
+    }
+    final_role = role_map.get(user.role, user.role.lower())
+    
+    hashed_password = get_password_hash(user.password)
+    db_user = User(
+        username=user.username,
+        email=user.email,
+        hashed_password=hashed_password,
+        role=final_role
+    )
+    db.add(db_user)
+    await db.flush()  # Usa flush para obter o ID do banco antes do commit final
+    await db.refresh(db_user)
+    return db_user
 
 @router.post("/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):

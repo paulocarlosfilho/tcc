@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, constr
+from pydantic import BaseModel, EmailStr, Field, constr, ConfigDict
 from datetime import datetime
 from typing import Optional, List
 
@@ -13,9 +13,7 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Esquemas de Token
 class Token(BaseModel):
@@ -40,6 +38,4 @@ class HealthRecordResponse(HealthRecordBase):
     timestamp: datetime
     hash: str
     previous_hash: Optional[str]
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

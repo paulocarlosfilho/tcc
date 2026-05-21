@@ -1,57 +1,89 @@
 import asyncio
 import os
+import sys
 from typing import AsyncGenerator
+
+# Adiciona o diretório raiz do projeto (backend) ao sys.path
+# para resolver problemas de importação em diferentes ambientes de execução.
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 
 from app.database import Base, get_db
-from app.main import app
+from app.main import app as fastapi_app
 
-# Usa a mesma URL do banco de dados de teste do workflow de CI
-TEST_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://testuser:testpassword@localhost:5432/testdb")
+# Usa a mesma URL do banco de dados de teste do workflow de CI, mas aponta para a porta 5433
+TEST_DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://testuser:testpassword@localhost:5433/testdb")
 
-# Cria um novo engine de banco de dados para os testes
-engine = create_async_engine(TEST_DATABASE_URL)
 
-# Cria um novo sessionmaker para os testes
-TestingSessionLocal = async_sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
-)
-
-@pytest.fixture(scope="session", autouse=True)
-async def setup_database():
+@pytest.fixture(scope="function")
+async def db_engine():
     """
-    Cria as tabelas antes da sessão de testes e as remove depois.
+    Cria um engine de banco de dados isolado para cada teste.
+    'yields' o engine e garante que ele seja descartado no final, fechando todas as conexões.
     """
-    async with engine.begin() as conn:
+    engine = create_async_engine(TEST_DATABASE_URL)
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def setup_database(db_engine):
+    """
+    Cria as tabelas antes de cada teste e as remove depois, usando o engine do teste.
+    """
+    async with db_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
-    async with engine.begin() as conn:
+    async with db_engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
-@pytest.fixture(scope="function")
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Fornece uma nova sessão de banco de dados para cada função de teste.
-    """
-    async with TestingSessionLocal() as session:
-        yield session
 
 @pytest.fixture(scope="function")
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+async def client(db_engine, monkeypatch) -> AsyncGenerator[AsyncClient, None]:
     """
-    Cria um novo AsyncClient para cada função de teste, com a dependência
-    do banco de dados substituída para usar a sessão de teste isolada.
+    Cria um cliente de teste com uma transação de banco de dados totalmente isolada
+    usando o engine específico do teste.
+    
+    Usa monkeypatch para garantir que o ciclo de vida (lifespan) da aplicação também
+    use o engine de teste, prevenindo vazamento de conexões.
     """
-    async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
-        yield db_session
+    # Substitui o engine global da aplicação pelo engine de teste.
+    # O monkeypatch garante que a alteração seja desfeita após o teste.
+    import app.database
+    monkeypatch.setattr(app.database, "engine", db_engine)
 
-    app.dependency_overrides[get_db] = override_get_db
-    
-    async with AsyncClient(app=app, base_url="http://test") as c:
-        yield c
-    
-    # Limpa a substituição da dependência após o teste
-    del app.dependency_overrides[get_db]
+    # Cria um sessionmaker para o engine específico deste teste
+    TestingSessionLocal = async_sessionmaker(
+        db_engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    # Inicia uma conexão com o banco de dados de teste
+    connection = await db_engine.connect()
+    # Inicia uma transação principal
+    transaction = await connection.begin()
+
+    # Cria uma sessão de teste, vinculando-a à conexão existente
+    session = TestingSessionLocal(bind=connection)
+
+    # Inicia um "savepoint" para permitir transações aninhadas na aplicação
+    await connection.begin_nested()
+
+    # Substitui a dependência `get_db` para usar a sessão de teste
+    fastapi_app.dependency_overrides[get_db] = lambda: session
+
+    try:
+        async with AsyncClient(app=fastapi_app, base_url="http://test") as c:
+            yield c
+    finally:
+        # Limpeza
+        del fastapi_app.dependency_overrides[get_db]
+        await session.close()
+        await transaction.rollback()
+        await connection.close()
