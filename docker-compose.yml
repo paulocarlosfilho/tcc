@@ -54,6 +54,17 @@ services:
     depends_on:
       - api
 
+  db-test:
+    image: postgres:15-alpine
+    container_name: blockchain_db_test
+    restart: always
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: testdb
+    ports:
+      - "5433:5432" # Mapeia para a porta 5433 para não conflitar com o db de dev
+
 volumes:
   postgres_data:
   localstack_data:
