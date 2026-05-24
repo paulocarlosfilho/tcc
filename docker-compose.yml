@@ -43,6 +43,10 @@ services:
       - AWS_ENDPOINT_URL=http://localstack:4566
     ports:
       - "8000:8000"
+    command: >
+      bash -c "./wait-for-it.sh db:5432 --timeout=30 --
+      python -m app.seed &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build: ./frontend
@@ -64,6 +68,21 @@ services:
       POSTGRES_DB: testdb
     ports:
       - "5433:5432" # Mapeia para a porta 5433 para não conflitar com o db de dev
+
+  infra-tester:
+    build:
+      context: ./test_infra
+      dockerfile: Dockerfile
+    container_name: infra_tester
+    depends_on:
+      - api
+      - frontend
+      - db
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+
 
 volumes:
   postgres_data:

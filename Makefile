@@ -14,6 +14,7 @@ help:
 	@echo "  make test            - Executa os testes unitários/integração"
 	@echo "  make test-integrity  - Executa o super teste de integridade da blockchain"
 	@echo "  make test-blockchain - Executa o teste de fluxo completo (5 passos) no Docker"
+	@echo "  make test-infra      - Executa os testes de infraestrutura com o infra-tester"
 	@echo "  make reset-db        - Reseta o banco de dados local (SQLite)"
 
 install:
@@ -52,6 +53,10 @@ test-integrity:
 
 test-blockchain:
 	docker-compose exec -T api python -m pytest -s tests/test_blockchain_flow.py
+
+test-infra:
+	@echo "--> Executando testes de infraestrutura..."
+	docker-compose run --rm --build infra-tester
 
 reset-db:
 	docker-compose exec -T api python reset_db.py
