@@ -1,0 +1,175 @@
+{
+  "schemaVersion": "1.0",
+  "testSuite": "Testes de Infraestrutura e API - SUS Blockchain",
+  "tests": [
+    {
+      "testId": "INFRA-001",
+      "testName": "Conectividade com o Banco de Dados PostgreSQL",
+      "description": "Verifica se a API consegue se conectar ao banco de dados na porta 5432.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "checkPort",
+          "target": "db",
+          "port": 5432,
+          "timeout": 3000
+        }
+      ]
+    },
+    {
+      "testId": "API-CRUD-001",
+      "testName": "[CREATE] Criação de Novo Registro Médico via API",
+      "description": "Testa o endpoint de criação (POST) para um novo registro de paciente.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "httpRequest",
+          "method": "POST",
+          "target": "http://localhost:8000/records/",
+          "headers": {
+            "Authorization": "Bearer ${AUTH_TOKEN}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "patient_name": "José da Silva",
+            "doctor_name": "Dr. House",
+            "medical_notes": "Paciente apresenta sintomas de gripe."
+          },
+          "expectedStatusCode": 201
+        }
+      ]
+    },
+    {
+      "testId": "API-CRUD-002",
+      "testName": "[READ] Leitura de Registros Médicos",
+      "description": "Testa o endpoint de listagem (GET) para verificar se os registros são retornados.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "httpRequest",
+          "method": "GET",
+          "target": "http://localhost:8000/records/",
+          "headers": { "Authorization": "Bearer ${AUTH_TOKEN}" },
+          "expectedStatusCode": 200,
+          "expectJsonArray": true
+        }
+      ]
+    },
+    {
+      "testId": "API-CRUD-003",
+      "testName": "[UPDATE] Atualização de um Registro Médico",
+      "description": "Testa o endpoint de atualização (PUT) para um registro existente.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "httpRequest",
+          "method": "PUT",
+          "target": "http://localhost:8000/records/1",
+          "headers": {
+            "Authorization": "Bearer ${AUTH_TOKEN}",
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "medical_notes": "Atualização: Paciente com suspeita de dengue."
+          },
+          "expectedStatusCode": 200
+        }
+      ]
+    },
+    {
+      "testId": "API-CRUD-004",
+      "testName": "[DELETE] Deleção de um Registro Médico",
+      "description": "Testa o endpoint de deleção (DELETE). Espera-se um erro, pois a blockchain não permite deleção.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "httpRequest",
+          "method": "DELETE",
+          "target": "http://localhost:8000/records/1",
+          "headers": { "Authorization": "Bearer ${AUTH_TOKEN}" },
+          "expectedStatusCode": 405
+        }
+      ]
+    },
+    {
+      "testId": "INFRA-002",
+      "testName": "Disponibilidade do Frontend",
+      "description": "Verifica se o container do frontend está servindo a aplicação na porta 3000.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "httpRequest",
+          "method": "GET",
+          "target": "http://localhost:3000",
+          "expectedStatusCode": 200
+        }
+      ]
+    },
+    {
+      "testId": "SEC-001",
+      "testName": "Verificação de Usuário Não-Root no Container da API",
+      "description": "Garante que o container da API não está rodando com o usuário root.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "dockerExec",
+          "container": "api",
+          "command": "whoami",
+          "expectedOutput": "appuser",
+          "negate": false
+        }
+      ]
+    },
+    {
+      "testId": "SEC-002",
+      "testName": "Verificação de Cabeçalhos de Segurança no Frontend",
+      "description": "Verifica se o Nginx está enviando cabeçalhos de segurança importantes.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "httpRequest",
+          "method": "GET",
+          "target": "http://localhost:3000",
+          "expectedStatusCode": 200,
+          "expectedHeaders": {
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff"
+          }
+        }
+      ]
+    },
+    {
+      "testId": "APP-001",
+      "testName": "Integridade da Blockchain",
+      "description": "Testa o endpoint que verifica a integridade de toda a cadeia de blocos.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "httpRequest",
+          "method": "GET",
+          "target": "http://localhost:8000/records/verify",
+          "headers": { "Authorization": "Bearer ${AUTH_TOKEN}" },
+          "expectedStatusCode": 200,
+          "expectedJson": { "is_valid": true }
+        }
+      ]
+    },
+    {
+      "testId": "API-AUTH-001",
+      "testName": "Autenticação e Geração de Token JWT",
+      "description": "Testa o fluxo de login para obter um token de acesso.",
+      "enabled": true,
+      "steps": [
+        {
+          "action": "httpRequest",
+          "method": "POST",
+          "target": "http://localhost:8000/auth/login",
+          "body": "username=medico.teste&password=password123",
+          "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+          "expectedStatusCode": 200,
+          "expectJsonField": "access_token"
+        }
+      ]
+    }
+  ]
+}
