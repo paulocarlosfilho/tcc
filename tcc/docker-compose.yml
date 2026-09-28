@@ -1,0 +1,89 @@
+services:
+  localstack:
+    container_name: "localstack_main"
+    image: localstack/localstack:latest
+    ports:
+      - "4510-4569:4510-4569"
+      - "8080:8080"
+    environment:
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:-}
+      - SERVICES=s3,cloudformation,ecr
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "localstack_data:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+  db:
+    image: postgres:15-alpine
+    container_name: blockchain_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-blockchain_sus}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  api:
+    build: ./backend
+    container_name: blockchain_api
+    depends_on:
+      - db
+      - localstack
+    environment:
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-blockchain_sus}
+      - DATABASE_URL=postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@db:5432/${DB_NAME:-blockchain_sus}
+      - SECRET_KEY=${SECRET_KEY:-super-secret-key-123}
+      - ENVIRONMENT=development
+      - AWS_ENDPOINT_URL=http://localstack:4566
+    ports:
+      - "8000:8000"
+    command: >
+      bash -c "./wait-for-it.sh db:5432 --timeout=30 --
+      python -m app.seed &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    build: ./frontend
+    container_name: blockchain_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - api
+
+  db-test:
+    image: postgres:15-alpine
+    container_name: blockchain_db_test
+    restart: always
+    environment:
+      POSTGRES_USER: testuser
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: testdb
+    ports:
+      - "5433:5432" # Mapeia para a porta 5433 para não conflitar com o db de dev
+
+  infra-tester:
+    build:
+      context: ./test_infra
+      dockerfile: Dockerfile
+    container_name: infra_tester
+    depends_on:
+      - api
+      - frontend
+      - db
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+
+
+volumes:
+  postgres_data:
+  localstack_data:
